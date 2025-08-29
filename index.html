@@ -1,1 +1,368 @@
 
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BDR 일정 안내</title>
+  <style>
+    :root{
+      --bg:#0f1115; --panel:#141821; --muted:#8b93a7; --text:#e8ecf1; --brand:#ff5938; --chip:#1e2430;
+      --ok:#1f9d55; --warn:#f7b731; --border:#20283a; --radius:16px;
+    }
+    html,body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,'Apple SD Gothic Neo','Noto Sans KR',sans-serif}
+    .wrap{max-width:1100px;margin:0 auto;padding:24px}
+    header{display:flex;align-items:center;gap:14px;margin-bottom:16px}
+    .logo{width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,var(--brand),#ff9248)}
+    h1{font-size:22px;margin:0}
+    .sub{color:#9aa3b5;font-size:13px}
+
+    .toolbar{display:grid;grid-template-columns:1fr;gap:12px;margin:16px 0}
+    @media(min-width:768px){.toolbar{grid-template-columns:2fr 1fr 1fr 1fr 1fr}}
+    .panel{background:var(--panel);border-radius:var(--radius);padding:12px;border:1px solid var(--border)}
+    .panel input,.panel select{width:100%;padding:10px 12px;border-radius:12px;border:1px solid #2a3140;background:#0e121a;color:var(--text)}
+
+    .chips{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+    .chip{padding:6px 10px;border-radius:999px;background:var(--chip);font-size:12px;color:var(--muted)}
+
+    .actions{display:flex;flex-wrap:wrap;gap:8px}
+    button,.btn{appearance:none;border:0;border-radius:12px;padding:10px 14px;background:#222a38;color:#dfe6ef;cursor:pointer}
+    button.primary{background:var(--brand);color:#111}
+    button.ghost{background:transparent;border:1px solid #30384a}
+
+    .viewtabs{display:flex;gap:6px;margin:10px 0}
+    .viewtabs button{flex:0 0 auto}
+
+    .group{margin:24px 0}
+    .group h3{margin:0 0 10px 4px;color:#b7bfd3}
+
+    .cards{display:grid;grid-template-columns:1fr;gap:12px}
+    @media(min-width:720px){.cards{grid-template-columns:1fr 1fr}}
+
+    .card{background:var(--panel);border-radius:var(--radius);padding:14px;display:flex;gap:12px;border:1px solid var(--border)}
+    .time{min-width:120px}
+    .title{font-weight:700}
+    .meta{font-size:13px;color:var(--muted)}
+    .badges{display:flex;gap:6px;margin-top:6px}
+    .badge{font-size:12px;background:#1a2230;color:#bcd; border:1px solid #2a3245;padding:3px 8px;border-radius:999px}
+
+    .table{width:100%;border-collapse:separate;border-spacing:0 8px}
+    .table th{color:#9aa3b5;font-weight:600;text-align:left;padding:6px 10px}
+    .table td{background:var(--panel);border:1px solid var(--border);padding:10px;border-left:0;border-right:0}
+    .row{border-radius:12px;overflow:hidden}
+
+    .footer{opacity:.8;font-size:12px;margin:24px 4px}
+    a{color:#b7cdfd}
+  </style>
+  <!-- Libraries: html2canvas & qrcode -->
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs/qrcode.min.js" defer></script>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="logo" aria-hidden="true"></div>
+      <div>
+        <h1>BDR 일정 안내</h1>
+        <div class="sub">구분·종별·장소 필터, 검색, PNG/ICS/캘린더 추가, QR 공유</div>
+      </div>
+    </header>
+
+    <section class="toolbar">
+      <div class="panel"><input id="q" placeholder="검색: 대회명/장소/요강" /></div>
+      <div class="panel"><select id="selGroup"><option value="">구분(전체)</option></select></div>
+      <div class="panel"><select id="selDivision"><option value="">종별(전체)</option></select></div>
+      <div class="panel"><select id="selLocation"><option value="">장소(전체)</option></select></div>
+      <div class="panel" style="display:flex;gap:8px">
+        <input type="date" id="from" style="flex:1" />
+        <input type="date" id="to" style="flex:1" />
+      </div>
+    </section>
+
+    <div class="actions" style="margin-bottom:6px">
+      <button id="btnReload" class="ghost" title="기간 내 새로고침">기간 조회</button>
+      <button id="btnToday" class="ghost">오늘</button>
+      <button id="btnWeekend" class="ghost">이번 주말</button>
+      <button id="btnPng" title="보이는 영역을 이미지로 저장">PNG 저장</button>
+      <button id="btnShare" class="ghost" title="현재 필터 상태로 링크 복사">링크 복사</button>
+      <button id="btnQR" class="ghost">QR 생성</button>
+    </div>
+
+    <div class="viewtabs">
+      <button id="tabCards" class="primary">카드 뷰</button>
+      <button id="tabTable" class="ghost">테이블 뷰</button>
+    </div>
+
+    <div class="chips" id="chips"></div>
+
+    <div id="out"></div>
+
+    <div id="qrwrap" class="panel" style="display:none; margin-top:14px">
+      <div id="qr" style="width:140px;height:140px"></div>
+    </div>
+
+    <div class="footer">Timezone: Asia/Seoul · 마지막 새로고침 <span id="last"></span></div>
+  </div>
+
+<script>
+  // =============================================================
+  // 1) 설정: 아래에 Apps Script Web App URL 붙여넣기
+  // =============================================================
+  const API_URL = 'https://script.google.com/macros/s/AKfycbzLOSucnewnqF1IJAE6UHgIlBbFL_N2qkNZkc0QbKUEorOGCCEHknYScpqNHjKtzzaFsw/exec';
+  const TZ = 'Asia/Seoul';
+
+  const $ = (sel) => document.querySelector(sel);
+  const state = { events: [], view: 'cards' };
+
+  function toKo(ms){return new Date(ms).toLocaleString('ko-KR',{timeZone:TZ,hour12:false})}
+  function fmtDate(ms){return new Date(ms).toLocaleDateString('ko-KR',{timeZone:TZ,weekday:'short',month:'2-digit',day:'2-digit'})}
+  function fmtTime(ms){return new Date(ms).toLocaleTimeString('ko-KR',{timeZone:TZ,hour:'2-digit',minute:'2-digit',hour12:false})}
+  function fmtISO(d){const y=d.getFullYear(); const m=('0'+(d.getMonth()+1)).slice(-2); const day=('0'+d.getDate()).slice(-2); return `${y}-${m}-${day}`}
+  function unique(arr){return [...new Set(arr.filter(Boolean))]}
+  function escapeHtml(s){return (s||'').replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]))}
+
+  function getFilters(){
+    return {
+      q: $('#q').value.trim().toLowerCase(),
+      group: $('#selGroup').value || '',
+      division: $('#selDivision').value || '',
+      location: $('#selLocation').value || ''
+    };
+  }
+
+  function setChips(){
+    const f = getFilters();
+    const chips = [];
+    if (f.q) chips.push(`검색: ${escapeHtml(f.q)}`);
+    if (f.group) chips.push(`구분: ${escapeHtml(f.group)}`);
+    if (f.division) chips.push(`종별: ${escapeHtml(f.division)}`);
+    if (f.location) chips.push(`장소: ${escapeHtml(f.location)}`);
+    $('#chips').innerHTML = chips.map(t=>`<span class="chip">${t}</span>`).join('');
+  }
+
+  function applyFilters(list){
+    const f = getFilters();
+    return list.filter(x => {
+      if (f.group && x.group !== f.group) return false;
+      if (f.division && x.division !== f.division) return false;
+      if (f.location && !(x.location||'').toLowerCase().includes(f.location.toLowerCase())) return false;
+      if (f.q){
+        const hay = (x.title+' '+x.location+' '+(x.summary||'')).toLowerCase();
+        if (!hay.includes(f.q)) return false;
+      }
+      return true;
+    });
+  }
+
+  async function fetchEvents(){
+    const from = $('#from').value; const to = $('#to').value;
+    const url = new URL(API_URL);
+    if(from) url.searchParams.set('from', from);
+    if(to) url.searchParams.set('to', to);
+    const res = await fetch(url.toString());
+    if(!res.ok) throw new Error('API 오류');
+    const data = await res.json();
+    state.events = (data && data.events) ? data.events : [];
+    $('#last').textContent = new Date().toLocaleTimeString('ko-KR');
+    hydrateFilters();
+    render();
+  }
+
+  function hydrateFilters(){
+    const g = $('#selGroup'); const d = $('#selDivision'); const l = $('#selLocation');
+    const groups = unique(state.events.map(e=>e.group));
+    const divs = unique(state.events.map(e=>e.division));
+    const locs = unique(state.events.map(e=>e.location));
+    g.innerHTML = '<option value="">구분(전체)</option>' + groups.map(v=>`<option>${escapeHtml(v)}</option>`).join('');
+    d.innerHTML = '<option value="">종별(전체)</option>' + divs.map(v=>`<option>${escapeHtml(v)}</option>`).join('');
+    l.innerHTML = '<option value="">장소(전체)</option>' + locs.map(v=>`<option>${escapeHtml(v)}</option>`).join('');
+  }
+
+  function render(){
+    const list = applyFilters(state.events);
+    setChips();
+    if (state.view === 'cards') renderCards(groupByDate(list));
+    else renderTable(list);
+  }
+
+  function groupByDate(list){
+    const map = new Map();
+    list.forEach(ev=>{
+      const k = new Date(ev.start).toLocaleDateString('sv-SE',{timeZone:TZ}); // YYYY-MM-DD
+      if(!map.has(k)) map.set(k, []);
+      map.get(k).push(ev);
+    });
+    for(const [k, arr] of map) arr.sort((a,b)=>a.start-b.start);
+    return map;
+  }
+
+  function renderCards(grouped){
+    const out = $('#out'); out.innerHTML = '';
+    for(const [date, arr] of grouped){
+      const wrap = document.createElement('div'); wrap.className='group';
+      const h = document.createElement('h3'); h.textContent = `${date} (${new Date(date).toLocaleDateString('ko-KR',{weekday:'short'})})`;
+      wrap.appendChild(h);
+
+      const grid = document.createElement('div'); grid.className='cards';
+      arr.forEach(ev=> grid.appendChild(card(ev)) );
+      wrap.appendChild(grid);
+      out.appendChild(wrap);
+    }
+  }
+
+  function card(ev){
+    const el = document.createElement('div'); el.className='card';
+    const left = document.createElement('div'); left.className='time';
+    left.innerHTML = `<div>${fmtTime(ev.start)}${ev.allDay?'':' ~ '+fmtTime(ev.end)}</div><div class="meta">${escapeHtml(ev.location||'')}</div>`;
+
+    const right = document.createElement('div');
+    const tags = [ev.group, ev.division].filter(Boolean).join('/');
+    right.innerHTML = `
+      <div class="title">${escapeHtml(ev.name)}</div>
+      <div class="meta">${tags?`[${escapeHtml(tags)}] `:''}${escapeHtml(ev.title||'')}</div>
+      <div class="badges">${badge(ev.group)}${badge(ev.division)}${ev.url?`<a class="badge" href="${ev.url}" target="_blank" rel="noopener">대회요강</a>`:''}</div>
+    `;
+
+    const act = document.createElement('div'); act.className='actions'; act.style.marginTop='8px';
+    const aCal = document.createElement('a'); aCal.className='btn'; aCal.textContent='구글캘린더 추가'; aCal.target='_blank'; aCal.rel='noopener'; aCal.href=gcalLink(ev);
+    const bIcs = document.createElement('button'); bIcs.className='ghost'; bIcs.textContent='ICS'; bIcs.addEventListener('click', ()=>downloadICS(ev));
+    act.appendChild(aCal); act.appendChild(bIcs);
+    right.appendChild(act);
+
+    el.appendChild(left); el.appendChild(right);
+    return el;
+  }
+
+  function badge(t){ if(!t) return ''; return `<span class="badge">${escapeHtml(t)}</span>` }
+
+  function renderTable(list){
+    const out = $('#out');
+    const tbl = document.createElement('table'); tbl.className='table';
+    tbl.innerHTML = `
+      <thead><tr>
+        <th>일시</th><th>대회명</th><th>구분/종별</th><th>장소</th><th>요강</th><th>추가</th>
+      </tr></thead>
+      <tbody></tbody>`;
+    const tb = tbl.querySelector('tbody');
+    list.forEach(ev=>{
+      const tr = document.createElement('tr'); tr.className='row';
+      const tags = [ev.group, ev.division].filter(Boolean).join('/');
+      tr.innerHTML = `
+        <td>${fmtDate(ev.start)} ${fmtTime(ev.start)}</td>
+        <td><strong>${escapeHtml(ev.name)}</strong></td>
+        <td>${escapeHtml(tags)}</td>
+        <td>${escapeHtml(ev.location||'')}</td>
+        <td>${ev.url?`<a href="${ev.url}" target="_blank" rel="noopener">열기</a>`:''}</td>
+        <td><a href="${gcalLink(ev)}" target="_blank" rel="noopener">캘린더</a> · <a href="#" class="dl-ics">ICS</a></td>
+      `;
+      tr.querySelector('.dl-ics').addEventListener('click', (e)=>{e.preventDefault(); downloadICS(ev);});
+      tb.appendChild(tr);
+    });
+    out.innerHTML = ''; out.appendChild(tbl);
+  }
+
+  function gcalLink(ev){
+    const enc = encodeURIComponent;
+    const dt = (ms)=> new Date(ms).toISOString().replace(/[-:]/g,'').split('.')[0]+'Z'; // UTC time
+    const dates = dt(ev.start)+'/'+dt(ev.end);
+    const text = enc(ev.name||'');
+    const details = enc((ev.summary||''));
+    const loc = enc(ev.location||'');
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${text}&dates=${dates}&details=${details}&location=${loc}`;
+  }
+
+  function downloadICS(ev){
+    const ics = buildICS(ev);
+    const blob = new Blob([ics], {type:'text/calendar;charset=utf-8'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${(ev.name||'BDR_일정').replace(/[^\w가-힣]+/g,'_')}.ics`;
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+
+  function buildICS(ev){
+    const dt = (ms)=> new Date(ms).toISOString().replace(/[-:]/g,'').split('.')[0]+'Z';
+    const esc = (s)=> (s||'').replace(/\\/g,'\\\\').replace(/\n/g,'\\n').replace(/,/g,'\\,').replace(/;/g,'\\;');
+    return [
+      'BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//BDR//Schedule//KR','CALSCALE:GREGORIAN',
+      'BEGIN:VEVENT',
+      'UID:'+(ev.id||('bdr-'+ev.start+'-'+Math.random().toString(36).slice(2))),
+      'DTSTAMP:'+dt(Date.now()),
+      'DTSTART:'+dt(ev.start),
+      'DTEND:'+dt(ev.end),
+      'SUMMARY:'+esc(ev.name||''),
+      'LOCATION:'+esc(ev.location||''),
+      'DESCRIPTION:'+esc(ev.summary||''),
+      'END:VEVENT','END:VCALENDAR'
+    ].join('\r\n') + '\r\n';
+  }
+
+  // ===== 액션 버튼 =====
+  $('#btnReload').onclick = fetchEvents;
+  $('#btnToday').onclick = () => { const d=new Date(); $('#from').value=fmtISO(d); $('#to').value=fmtISO(d); fetchEvents(); };
+  $('#btnWeekend').onclick = () => {
+    const d=new Date(); const day=d.getDay(); // 0=일
+    const sat = new Date(d); sat.setDate(d.getDate() + ((6 - day + 7)%7));
+    const sun = new Date(sat); sun.setDate(sat.getDate()+1);
+    $('#from').value=fmtISO(sat); $('#to').value=fmtISO(sun); fetchEvents();
+  };
+  $('#tabCards').onclick = ()=>{state.view='cards'; render();};
+  $('#tabTable').onclick = ()=>{state.view='table'; render();};
+  $('#q').oninput = render; $('#selGroup').onchange = render; $('#selDivision').onchange = render; $('#selLocation').onchange = render;
+
+  $('#btnPng').onclick = async ()=>{
+    const node = $('#out');
+    const canvas = await html2canvas(node, {useCORS:true, backgroundColor:'#0f1115', scale:2});
+    canvas.toBlob(b=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='BDR_일정.png'; a.click(); }, 'image/png');
+  };
+
+  function currentShareUrl(){
+    const url = new URL(location.href);
+    const f = getFilters();
+    for(const k of Object.keys(f)){
+      if (f[k]) url.searchParams.set(k, f[k]); else url.searchParams.delete(k);
+    }
+    const from = $('#from').value; const to = $('#to').value;
+    if (from) url.searchParams.set('from', from); else url.searchParams.delete('from');
+    if (to) url.searchParams.set('to', to); else url.searchParams.delete('to');
+    return url.toString();
+  }
+
+  $('#btnShare').onclick = async ()=>{
+    const link = currentShareUrl();
+    try { await navigator.clipboard.writeText(link); alert('링크가 복사되었습니다.'); }
+    catch { prompt('복사할 링크입니다. Ctrl/Cmd+C로 복사하세요:', link); }
+  };
+
+  $('#btnQR').onclick = ()=>{
+    const link = currentShareUrl();
+    $('#qrwrap').style.display = 'block';
+    $('#qr').innerHTML = '';
+    new QRCode(document.getElementById('qr'), {text:link, width:140, height:140});
+  };
+
+  // URL 파라미터에서 필터 초기화
+  function initFromQuery(){
+    const p = new URLSearchParams(location.search);
+    if (p.get('from')) $('#from').value = p.get('from');
+    if (p.get('to')) $('#to').value = p.get('to');
+    if (p.get('q')) $('#q').value = p.get('q');
+    if (p.get('group')) $('#selGroup').value = p.get('group');
+    if (p.get('division')) $('#selDivision').value = p.get('division');
+    if (p.get('location')) $('#selLocation').value = p.get('location');
+  }
+
+  // 초기 날짜: 오늘 ~ +30일
+  (function init(){
+    const p = new URLSearchParams(location.search);
+    if (!p.get('from') || !p.get('to')){
+      const today = new Date(); const to = new Date(); to.setDate(today.getDate()+30);
+      $('#from').value = fmtISO(today);
+      $('#to').value = fmtISO(to);
+    }
+    initFromQuery();
+    fetchEvents().catch(err=>{alert('데이터를 불러오지 못했습니다. API_URL 및 접근권한을 확인하세요.'); console.error(err)});
+  })();
+</script>
+</body>
+</html>
