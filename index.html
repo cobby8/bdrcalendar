@@ -1,4 +1,3 @@
-
 <!doctype html>
 <html lang="ko">
 <head>
@@ -53,8 +52,8 @@
 
     .footer{opacity:.8;font-size:12px;margin:24px 4px}
     a{color:#b7cdfd}
+    .debug{white-space:pre-wrap;background:#1a1e29;border:1px dashed #39425a;border-radius:12px;padding:12px;margin-top:12px;color:#c7d1e6;font-size:12px}
   </style>
-  <!-- Libraries: html2canvas & qrcode -->
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs/qrcode.min.js" defer></script>
 </head>
@@ -102,24 +101,23 @@
     </div>
 
     <div class="footer">Timezone: Asia/Seoul · 마지막 새로고침 <span id="last"></span></div>
+
+    <div id="debug" class="debug" style="display:none"></div>
   </div>
 
 <script>
-  // =============================================================
-  // 1) 설정: 아래에 Apps Script Web App URL 붙여넣기
-  // =============================================================
-  const API_URL = 'https://script.google.com/macros/s/AKfycbzLOSucnewnqF1IJAE6UHgIlBbFL_N2qkNZkc0QbKUEorOGCCEHknYScpqNHjKtzzaFsw/exec';
+  // -------------------- 설정 --------------------
+  const API_URL = 'https://script.google.com/macros/s/AKfycbzLOSucnewnqF1IJAE6UHgIlBbFL_N2qkNZkc0QbKUEorOGCCEHknYScpqNHjKtzzaFsw/exec'; // 반드시 /exec
   const TZ = 'Asia/Seoul';
 
   const $ = (sel) => document.querySelector(sel);
   const state = { events: [], view: 'cards' };
 
-  function toKo(ms){return new Date(ms).toLocaleString('ko-KR',{timeZone:TZ,hour12:false})}
   function fmtDate(ms){return new Date(ms).toLocaleDateString('ko-KR',{timeZone:TZ,weekday:'short',month:'2-digit',day:'2-digit'})}
   function fmtTime(ms){return new Date(ms).toLocaleTimeString('ko-KR',{timeZone:TZ,hour:'2-digit',minute:'2-digit',hour12:false})}
   function fmtISO(d){const y=d.getFullYear(); const m=('0'+(d.getMonth()+1)).slice(-2); const day=('0'+d.getDate()).slice(-2); return `${y}-${m}-${day}`}
   function unique(arr){return [...new Set(arr.filter(Boolean))]}
-  function escapeHtml(s){return (s||'').replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]))}
+  function escapeHtml(s){return (s||'').replace(/[&<>\"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]))}
 
   function getFilters(){
     return {
@@ -131,8 +129,7 @@
   }
 
   function setChips(){
-    const f = getFilters();
-    const chips = [];
+    const f = getFilters(), chips=[];
     if (f.q) chips.push(`검색: ${escapeHtml(f.q)}`);
     if (f.group) chips.push(`구분: ${escapeHtml(f.group)}`);
     if (f.division) chips.push(`종별: ${escapeHtml(f.division)}`);
@@ -154,18 +151,41 @@
     });
   }
 
+  // ----------- 핵심: 진단 강화 fetch -----------
   async function fetchEvents(){
     const from = $('#from').value; const to = $('#to').value;
     const url = new URL(API_URL);
     if(from) url.searchParams.set('from', from);
     if(to) url.searchParams.set('to', to);
-    const res = await fetch(url.toString());
-    if(!res.ok) throw new Error('API 오류');
-    const data = await res.json();
-    state.events = (data && data.events) ? data.events : [];
-    $('#last').textContent = new Date().toLocaleTimeString('ko-KR');
-    hydrateFilters();
-    render();
+
+    let text = '';
+    try {
+      const res = await fetch(url.toString(), { method:'GET', redirect:'follow' });
+      text = await res.text();
+
+      // 상태/본문 디버그 표시
+      const dbg = [`[DEBUG] 요청: ${url}`, `상태: ${res.status} ${res.statusText}`, `응답 앞부분:`, text.slice(0, 400)];
+      showDebug(dbg.join('\n'));
+
+      if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+
+      // JSON 파싱 시도
+      const data = JSON.parse(text);
+      state.events = (data && data.events) ? data.events : [];
+      $('#last').textContent = new Date().toLocaleTimeString('ko-KR');
+      hydrateFilters();
+      render();
+    } catch (err) {
+      alert('데이터를 불러오지 못했습니다. API_URL 및 접근권한을 확인하세요.');
+      console.error('Fetch error:', err);
+      if (text) showDebug('[에러 원문 일부]\n' + text.slice(0, 800));
+    }
+  }
+
+  function showDebug(msg){
+    const el = $('#debug');
+    el.style.display = 'block';
+    el.textContent = msg;
   }
 
   function hydrateFilters(){
@@ -263,7 +283,7 @@
 
   function gcalLink(ev){
     const enc = encodeURIComponent;
-    const dt = (ms)=> new Date(ms).toISOString().replace(/[-:]/g,'').split('.')[0]+'Z'; // UTC time
+    const dt = (ms)=> new Date(ms).toISOString().replace(/[-:]/g,'').split('.')[0]+'Z';
     const dates = dt(ev.start)+'/'+dt(ev.end);
     const text = enc(ev.name||'');
     const details = enc((ev.summary||''));
@@ -297,7 +317,7 @@
     ].join('\r\n') + '\r\n';
   }
 
-  // ===== 액션 버튼 =====
+  // 액션 버튼
   $('#btnReload').onclick = fetchEvents;
   $('#btnToday').onclick = () => { const d=new Date(); $('#from').value=fmtISO(d); $('#to').value=fmtISO(d); fetchEvents(); };
   $('#btnWeekend').onclick = () => {
@@ -341,27 +361,17 @@
     new QRCode(document.getElementById('qr'), {text:link, width:140, height:140});
   };
 
-  // URL 파라미터에서 필터 초기화
-  function initFromQuery(){
-    const p = new URLSearchParams(location.search);
-    if (p.get('from')) $('#from').value = p.get('from');
-    if (p.get('to')) $('#to').value = p.get('to');
-    if (p.get('q')) $('#q').value = p.get('q');
-    if (p.get('group')) $('#selGroup').value = p.get('group');
-    if (p.get('division')) $('#selDivision').value = p.get('division');
-    if (p.get('location')) $('#selLocation').value = p.get('location');
-  }
-
-  // 초기 날짜: 오늘 ~ +30일
+  // 초기화
   (function init(){
     const p = new URLSearchParams(location.search);
     if (!p.get('from') || !p.get('to')){
       const today = new Date(); const to = new Date(); to.setDate(today.getDate()+30);
       $('#from').value = fmtISO(today);
       $('#to').value = fmtISO(to);
+    } else {
+      $('#from').value = p.get('from'); $('#to').value = p.get('to');
     }
-    initFromQuery();
-    fetchEvents().catch(err=>{alert('데이터를 불러오지 못했습니다. API_URL 및 접근권한을 확인하세요.'); console.error(err)});
+    fetchEvents();
   })();
 </script>
 </body>
